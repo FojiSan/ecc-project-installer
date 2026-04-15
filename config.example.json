@@ -1,0 +1,12 @@
+{
+  "eccPath": null,
+  "languages": ["typescript"],
+  "modules": {
+    "agents": true,
+    "rules": true,
+    "skills": true,
+    "commands": true,
+    "hooks": true
+  },
+  "autoFixHookPaths": true
+}

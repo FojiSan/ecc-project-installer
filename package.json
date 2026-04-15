@@ -1,0 +1,18 @@
+{
+  "name": "ecc-project-installer",
+  "version": "1.0.0",
+  "description": "Project-local installer for Everything Claude Code (ECC)",
+  "main": "src/install-apply-local.js",
+  "bin": {
+    "ecc-local": "src/install-apply-local.js"
+  },
+  "scripts": {
+    "install-local": "node src/install-apply-local.js"
+  },
+  "keywords": ["claude-code", "ecc", "installer", "project-local"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
