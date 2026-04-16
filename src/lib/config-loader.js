@@ -13,7 +13,7 @@ const DEFAULT_CONFIG = {
   eccPath: null,  // Auto-detect
   eccGitUrl: 'https://github.com/affaan-m/everything-claude-code.git',
   keepEcc: false,  // If true, don't cleanup temp clone
-  mode: 'legacy',
+  mode: 'legacy-compat',  // 'legacy-compat' expands to full ECC (agents, commands, hooks, etc.)
   languages: ['typescript'],
   // TODO: L1 - modules filtering not yet implemented, reserved for future use
   modules: {

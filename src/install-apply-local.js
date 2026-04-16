@@ -91,7 +91,7 @@ async function main() {
 
   // 4. Build install request
   const request = {
-    mode: config.mode || 'legacy',
+    mode: config.mode || 'legacy-compat',
     target: 'claude',
     legacyLanguages: config.languages || ['typescript'],
     moduleIds: [],
