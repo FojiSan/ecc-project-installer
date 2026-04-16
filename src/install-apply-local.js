@@ -133,6 +133,11 @@ async function main() {
     fixHookPaths(projectRoot);
   }
 
+  // 9. Create settings.json with correct hooks format
+  if (config.createSettings !== false) {
+    createLocalSettings(projectRoot);
+  }
+
   if (usedTempEcc) {
     cleanupTempEcc(projectRoot, config);
   }
@@ -199,6 +204,32 @@ function fixHookPaths(projectRoot) {
   } catch (err) {
     console.warn(`Warning: Could not fix hook paths: ${err.message}`);
   }
+}
+
+/**
+ * Creates settings.json with hooks in the new structured format.
+ * Reads hooks.json (already installed) and embeds the hooks object.
+ */
+function createLocalSettings(projectRoot) {
+  const hooksFile = path.join(projectRoot, '.claude/hooks/hooks.json');
+  const settingsPath = path.join(projectRoot, '.claude/settings.json');
+
+  // Read hooks.json if it exists (should exist after installation)
+  let hooks = {};
+  if (fs.existsSync(hooksFile)) {
+    try {
+      const hooksConfig = JSON.parse(fs.readFileSync(hooksFile, 'utf8'));
+      // Extract the hooks object (new format has hooks nested under "hooks" key)
+      hooks = hooksConfig.hooks || {};
+    } catch (e) {
+      console.warn(`Warning: Could not parse hooks.json: ${e.message}`);
+    }
+  }
+
+  const settings = { hooks };
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+  console.log('Created .claude/settings.json with structured hooks');
 }
 
 main().catch(err => {
