@@ -57,6 +57,14 @@ Create `ecc-local.config.json` in your project root:
 }
 ```
 
+### Auto-Clone Fallback
+
+If ECC is not installed locally, the installer will automatically clone it from GitHub:
+
+- Default source: `https://github.com/affaan-m/everything-claude-code.git`
+- Clone location: `./.tmp/ecc-source` (auto-deleted after install)
+- Keep clone: Use `--keep-ecc` flag or `"keepEcc": true` in config
+
 ## How It Works
 
 1. Creates a custom `claude-project` adapter with `kind: 'project'`

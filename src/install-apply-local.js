@@ -7,6 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { execSync } = require('child_process');
 
 const { setEccPath, createClaudeProjectAdapter } = require('./lib/claude-project');
 const { loadConfig, resolveEccPath, parseCliArgs } = require('./lib/config-loader');
@@ -21,6 +22,34 @@ const DEFAULT_ECC_PATH = path.join(
   '.claude/plugins/marketplaces/everything-claude-code'
 );
 
+function cloneEccIfMissing(config, projectRoot) {
+  const tmpEccDir = path.join(projectRoot, '.tmp', 'ecc-source');
+
+  // Check if already cloned
+  if (fs.existsSync(path.join(tmpEccDir, 'package.json'))) {
+    console.log(`Using cached ECC at ${tmpEccDir}`);
+    return tmpEccDir;
+  }
+
+  console.log(`Cloning ECC from ${config.eccGitUrl}...`);
+  fs.mkdirSync(path.join(projectRoot, '.tmp'), { recursive: true });
+  execSync(`git clone --depth 1 "${config.eccGitUrl}" "${tmpEccDir}"`, { stdio: 'inherit' });
+  console.log('ECC cloned successfully');
+  return tmpEccDir;
+}
+
+function cleanupTempEcc(projectRoot, config) {
+  if (config.keepEcc) {
+    console.log('Keeping temporary ECC source (--keep-ecc)');
+    return;
+  }
+  const tmpEccDir = path.join(projectRoot, '.tmp', 'ecc-source');
+  if (fs.existsSync(tmpEccDir)) {
+    fs.rmSync(tmpEccDir, { recursive: true, force: true });
+    console.log('Cleaned up temporary ECC source');
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const projectRoot = process.cwd();
@@ -33,12 +62,13 @@ async function main() {
   const cliOverrides = parseCliArgs(args);
   const config = { ...fileConfig, ...cliOverrides };
 
-  const eccPath = resolveEccPath(config, DEFAULT_ECC_PATH);
+  let eccPath = resolveEccPath(config, DEFAULT_ECC_PATH);
+  let usedTempEcc = false;
 
   if (!fs.existsSync(eccPath)) {
-    console.error(`ERROR: ECC not found at ${eccPath}`);
-    console.error('Set eccPath in config.json or install ECC first.');
-    process.exit(1);
+    console.log(`ECC not found at ${eccPath}, will clone from GitHub...`);
+    eccPath = cloneEccIfMissing(config, projectRoot);
+    usedTempEcc = true;
   }
 
   console.log(`ECC source: ${eccPath}`);
@@ -106,6 +136,10 @@ async function main() {
   // 9. Create settings.json
   if (config.createSettings !== false) {
     createLocalSettings(projectRoot);
+  }
+
+  if (usedTempEcc) {
+    cleanupTempEcc(projectRoot, config);
   }
 
   console.log('Installation complete!');

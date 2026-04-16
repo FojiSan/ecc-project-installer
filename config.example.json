@@ -1,5 +1,7 @@
 {
   "eccPath": null,
+  "eccGitUrl": "https://github.com/affaan-m/everything-claude-code.git",
+  "keepEcc": false,
   "languages": ["typescript"],
   "modules": {
     "agents": true,

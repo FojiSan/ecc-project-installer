@@ -11,6 +11,8 @@ const CONFIG_FILENAME = 'ecc-local.config.json';
 
 const DEFAULT_CONFIG = {
   eccPath: null,  // Auto-detect
+  eccGitUrl: 'https://github.com/affaan-m/everything-claude-code.git',
+  keepEcc: false,  // If true, don't cleanup temp clone
   mode: 'legacy',
   languages: ['typescript'],
   // TODO: L1 - modules filtering not yet implemented, reserved for future use
@@ -133,6 +135,8 @@ function parseCliArgs(args) {
         throw new Error('Invalid --ecc-path value');
       }
       overrides.eccPath = path.resolve(eccPath);
+    } else if (arg === '--keep-ecc') {
+      overrides.keepEcc = true;
     } else if (arg === '--dry-run') {
       overrides.dryRun = true;
     } else if (arg === '--mode' && args[i + 1]) {
