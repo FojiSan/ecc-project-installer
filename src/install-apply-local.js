@@ -133,11 +133,6 @@ async function main() {
     fixHookPaths(projectRoot);
   }
 
-  // 9. Create settings.json
-  if (config.createSettings !== false) {
-    createLocalSettings(projectRoot);
-  }
-
   if (usedTempEcc) {
     cleanupTempEcc(projectRoot, config);
   }
@@ -153,6 +148,11 @@ function patchPlanForProjectLocal(plan, projectRoot) {
   // H2 fix: Normalize paths and use startsWith for reliable matching
   const homeClaudePath = path.join(os.homedir(), '.claude');
   const projectClaudePath = path.join(projectRoot, '.claude');
+
+  // Patch targetRoot so applyInstallPlan writes settings.json to project-local path
+  if (plan.targetRoot && plan.targetRoot.startsWith(homeClaudePath)) {
+    plan.targetRoot = plan.targetRoot.replace(homeClaudePath, projectClaudePath);
+  }
 
   plan.operations.forEach(op => {
     if (op.destinationPath) {
@@ -199,16 +199,6 @@ function fixHookPaths(projectRoot) {
   } catch (err) {
     console.warn(`Warning: Could not fix hook paths: ${err.message}`);
   }
-}
-
-function createLocalSettings(projectRoot) {
-  const settingsPath = path.join(projectRoot, '.claude/settings.json');
-  const settings = {
-    hooks: '.claude/hooks/hooks.json',
-  };
-  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
-  console.log('Created .claude/settings.json');
 }
 
 main().catch(err => {
