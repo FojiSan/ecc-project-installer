@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.env
+plans/
+.tmp/
+.claude/
+archived/
+archived/
