@@ -4,59 +4,30 @@
 #
 # Usage:
 #   .\install-ecc-baseline.ps1 -SourcePath "C:\path\to\everything-claude-code" -TargetPath "C:\path\to\my-project"
-#   .\install-ecc-baseline.ps1 -TargetPath "C:\path\to\my-project"   # prompts for SourcePath
+#   .\install-ecc-baseline.ps1 -TargetPath "C:\path\to\my-project"   # clones ECC from GitHub automatically
+#   .\install-ecc-baseline.ps1 -TargetPath "C:\path\to\my-project" -KeepClone  # keep temp clone after install
 #
 # IMPORTANT: After install, edit .claude/settings.json and replace YOUR_*_HERE placeholders with real API keys.
 
 param(
     [string]$SourcePath = $env:ECC_SOURCE,
-    [string]$TargetPath = (Get-Location).Path
+    [string]$TargetPath = (Get-Location).Path,
+    [string]$EccGitUrl  = "https://github.com/affaan-m/everything-claude-code.git",
+    [switch]$KeepClone
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# --- Resolve SourcePath ---
-
-if (-not $SourcePath) {
-    $SourcePath = Read-Host "Path to ECC source repo (everything-claude-code)"
-}
-
-$SourcePath = $SourcePath.TrimEnd('\', '/')
-$TargetPath = $TargetPath.TrimEnd('\', '/')
-
-# --- Validate inputs ---
-
-if (-not (Test-Path $SourcePath -PathType Container)) {
-    Write-Error "ECC source not found: $SourcePath"
-    exit 1
-}
-
-if (-not (Test-Path "$SourcePath\agents" -PathType Container)) {
-    Write-Error "Not a valid ECC repo (missing agents/ dir): $SourcePath"
-    exit 1
-}
-
-if (-not (Test-Path $TargetPath -PathType Container)) {
-    Write-Error "Target project directory not found: $TargetPath"
-    exit 1
-}
-
-$ClaudeDest   = Join-Path $TargetPath ".claude"
-$SettingsFile = Join-Path $ClaudeDest "settings.json"
-
-Write-Host "ECC source  : $SourcePath"
-Write-Host "Target      : $TargetPath"
-Write-Host "Destination : $ClaudeDest"
-Write-Host ""
-
-# --- Helper: copy a directory recursively ---
+# ============================================================================
+# HELPER FUNCTIONS (defined first to ensure availability)
+# ============================================================================
 
 function Copy-Dir {
     param([string]$Src, [string]$Dst, [string]$Label)
 
     if (-not (Test-Path $Src -PathType Container)) {
-        Write-Warning "  [SKIP] $Label — source not found: $Src"
+        Write-Warning "  [SKIP] $Label - source not found: $Src"
         return
     }
 
@@ -68,14 +39,12 @@ function Copy-Dir {
     Write-Host "    -> $Dst"
 }
 
-# --- Helper: copy individual files matching a glob pattern ---
-
 function Copy-Files {
     param([string]$Pattern, [string]$Dst, [string]$Label)
 
     $files = Get-Item -Path $Pattern -ErrorAction SilentlyContinue
     if (-not $files) {
-        Write-Warning "  [SKIP] $Label — no files matched: $Pattern"
+        Write-Warning "  [SKIP] $Label - no files matched: $Pattern"
         return
     }
 
@@ -89,14 +58,14 @@ function Copy-Files {
     Write-Host "    -> $Dst"
 }
 
-# --- Helper: merge a JSON object's key into settings.json ---
+# Merge a JSON object's key into settings.json.
 # Reads $SourceJson, extracts $Key (e.g. "hooks"), deep-merges into settings.json.
 
 function Merge-JsonKey {
     param([string]$SourceJson, [string]$Key, [string]$Label)
 
     if (-not (Test-Path $SourceJson -PathType Leaf)) {
-        Write-Warning "  [SKIP] $Label — source not found: $SourceJson"
+        Write-Warning "  [SKIP] $Label - source not found: $SourceJson"
         return
     }
 
@@ -111,11 +80,14 @@ function Merge-JsonKey {
 
     $srcValue = $srcContent.$Key
     if ($null -eq $srcValue) {
-        Write-Warning "  [SKIP] $Label — key '$Key' not found in source"
+        Write-Warning "  [SKIP] $Label - key '$Key' not found in source"
         return
     }
 
-    $dstValue = $dst.$Key
+    $dstValue = $null
+    if ($null -ne $dst.PSObject.Properties[$Key]) {
+        $dstValue = $dst.$Key
+    }
     if ($null -ne $dstValue) {
         # Hooks: merge each event array, deduplicating by id
         if ($Key -eq "hooks") {
@@ -165,6 +137,86 @@ function Merge-JsonKey {
     Write-Host "    -> $SettingsFile"
 }
 
+# ============================================================================
+# MAIN SCRIPT
+# ============================================================================
+
+# --- Resolve SourcePath: clone from GitHub if not provided ---
+
+$ClonedTempDir = $null
+
+if (-not $SourcePath) {
+    # Check git is available
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $gitCmd) {
+        Write-Error "git is not available on PATH. Install git or supply -SourcePath manually."
+        exit 1
+    }
+
+    $TmpBase = Join-Path $TargetPath ".tmp"
+    $ClonedTempDir = Join-Path $TmpBase "ecc-source"
+
+    Write-Host "No -SourcePath provided. Checking for cached ECC clone..."
+    Write-Host "  Location: $ClonedTempDir"
+    Write-Host ""
+
+    # Check if already cloned and valid
+    if ((Test-Path $ClonedTempDir -PathType Container) -and (Test-Path "$ClonedTempDir\agents" -PathType Container)) {
+        Write-Host "Found existing ECC clone at: $ClonedTempDir"
+        Write-Host "  Reusing cached clone (delete .tmp folder to force re-download)"
+        Write-Host ""
+        $SourcePath = $ClonedTempDir
+    }
+    else {
+        Write-Host "Cache not found or incomplete. Cloning ECC from GitHub..."
+        Write-Host "  URL  : $EccGitUrl"
+        Write-Host "  Into : $ClonedTempDir"
+        Write-Host ""
+
+        if (-not (Test-Path $TmpBase)) {
+            New-Item -ItemType Directory -Path $TmpBase -Force | Out-Null
+        }
+
+        git clone --depth 1 $EccGitUrl $ClonedTempDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "git clone failed (exit code $LASTEXITCODE). Check your internet connection and the repo URL."
+            exit 1
+        }
+
+        Write-Host "  Clone successful."
+        Write-Host ""
+        $SourcePath = $ClonedTempDir
+    }
+}
+
+$SourcePath = $SourcePath.TrimEnd('\', '/')
+$TargetPath = $TargetPath.TrimEnd('\', '/')
+
+# --- Validate inputs ---
+
+if (-not (Test-Path $SourcePath -PathType Container)) {
+    Write-Error "ECC source not found: $SourcePath"
+    exit 1
+}
+
+if (-not (Test-Path "$SourcePath\agents" -PathType Container)) {
+    Write-Error "Not a valid ECC repo (missing agents/ dir): $SourcePath"
+    exit 1
+}
+
+if (-not (Test-Path $TargetPath -PathType Container)) {
+    Write-Error "Target project directory not found: $TargetPath"
+    exit 1
+}
+
+$ClaudeDest   = Join-Path $TargetPath ".claude"
+$SettingsFile = Join-Path $ClaudeDest "settings.json"
+
+Write-Host "ECC source  : $SourcePath"
+Write-Host "Target      : $TargetPath"
+Write-Host "Destination : $ClaudeDest"
+Write-Host ""
+
 # --- Create .claude/ if it does not exist ---
 
 if (-not (Test-Path $ClaudeDest)) {
@@ -212,3 +264,18 @@ Merge-JsonKey "$SourcePath\mcp-configs\mcp-servers.json" "mcpServers" "mcp-confi
 Write-Host ""
 Write-Host "Done. ECC installed to $ClaudeDest"
 Write-Host "IMPORTANT: Edit $SettingsFile and replace YOUR_*_HERE placeholders with real API keys."
+
+# --- Cleanup .tmp clone (if we created one) ---
+
+if ($ClonedTempDir) {
+    $TmpBase = Join-Path $TargetPath ".tmp"
+    if ($KeepClone) {
+        Write-Host ""
+        Write-Host "Keeping temporary ECC clone at: $ClonedTempDir"
+    } else {
+        Write-Host ""
+        Write-Host "Removing temporary ECC clone..."
+        Remove-Item -Path $TmpBase -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "  Removed: $TmpBase"
+    }
+}

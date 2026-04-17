@@ -4,15 +4,17 @@
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| Windows (PowerShell 5.1+) | Supported | Tested and verified |
-| macOS / Linux | Portable | Script can be ported to Bash |
+| Windows (PowerShell 5.1+) | Supported | Tested and verified; ASCII-only output (no Unicode/em-dashes) |
+| Windows (PowerShell Core 7+) | Supported | Cross-platform via pwsh |
+| macOS / Linux (PowerShell Core 7+) | Portable | Run with `pwsh install-ecc-baseline.ps1` |
 
 ## Requirements
 
-| Requirement | Minimum Version | Notes |
-|-------------|-----------------|-------|
-| PowerShell | 5.1 | Windows only; no Node.js needed |
-| ECC Source | Latest | Must have valid directory structure with `agents/`, `rules/`, `skills/`, etc. |
+| Requirement | Minimum Version | Required When | Notes |
+|-------------|-----------------|---------------|-------|
+| PowerShell | 5.1 | Always | Windows built-in; or install PowerShell Core 7+ |
+| Git | Any recent | Auto-clone only | Only needed when `-SourcePath` is not provided |
+| ECC Source | Latest | Manual install only | Must have valid `agents/` directory |
 
 ## ECC Directory Structure
 
@@ -20,21 +22,35 @@ The installer expects the ECC source to contain:
 
 ```
 everything-claude-code/
-├── agents/           # *.md files
-├── rules/            # Subdirectories for rules
-├── skills/           # Skill definitions
-├── commands/         # *.md command files
+├── agents/               # *.md files (required for validation)
+├── rules/                # Subdirectories for rules
+├── .agents/
+│   └── skills/           # Primary skills path
+├── skills/               # Secondary skills path
+├── commands/             # *.md command files
 ├── hooks/
 │   └── hooks.json
 └── mcp-configs/
     └── mcp-servers.json
 ```
 
+The `agents/` directory is used as the validity check. If it is missing, the script exits with an error.
+
+## PowerShell 5.1 Compatibility Notes
+
+The script is written to be compatible with PowerShell 5.1 (Windows):
+
+- Output uses ASCII characters only (no em-dashes, no Unicode symbols)
+- JSON operations use `ConvertFrom-Json` / `ConvertTo-Json` with `-Depth 20`
+- File writes use `-Encoding UTF8` to avoid BOM issues on older PS versions
+- No use of PS 6+ features (null-coalescing operator `??`, ternary, etc.)
+
 ## Known Limitations
 
-- PowerShell-only (Windows native)
-- JSON merge operations use PowerShell's `ConvertFrom-Json` / `ConvertTo-Json`
-- No validation of MCP server placeholders — must edit settings.json manually after install
+- JSON merge uses PowerShell's `ConvertFrom-Json` / `ConvertTo-Json`; deeply nested objects are supported up to depth 20
+- No validation of MCP server placeholder values — must edit `settings.json` manually after install
+- `git clone --depth 1` is used for auto-clone; full history is not available in the cached copy
+- Cache reuse checks for `agents/` folder only; partial or corrupted clones must be cleared manually
 
 ## Known Issues
 
@@ -42,10 +58,13 @@ everything-claude-code/
 
 ## Troubleshooting
 
-If the installer fails:
-
-1. **ECC source not found**: Verify the `-SourcePath` points to a valid ECC repository
-2. **Target directory not found**: Ensure `-TargetPath` exists before running the installer
-3. **Missing ECC subdirectories**: Confirm your ECC source includes `agents/`, `rules/`, `skills/` directories
-4. **Permission denied**: Run PowerShell as Administrator if you lack write permissions to target
-5. **JSON merge errors**: Check `settings.json` formatting; ensure it's valid JSON before and after merge operations
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `git is not available on PATH` | Git not installed or not on PATH | Install Git or supply `-SourcePath` manually |
+| `ECC source not found` | Invalid `-SourcePath` value | Verify path points to a valid ECC repository |
+| `Not a valid ECC repo (missing agents/ dir)` | Source lacks `agents/` directory | Confirm you are pointing at the ECC root |
+| `Target project directory not found` | `-TargetPath` does not exist | Create the target directory before running |
+| `git clone failed` | Network issue or bad URL | Check internet connection and `-EccGitUrl` value |
+| Stale or incomplete cached clone | `.tmp/ecc-source/` is corrupted | Delete `.tmp/` folder and re-run to force fresh download |
+| `Permission denied` | Insufficient write access | Run PowerShell as Administrator |
+| `settings.json` merge errors | Malformed existing `settings.json` | Validate JSON before re-running; fix syntax errors first |
